@@ -7,3 +7,8 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+serenity = "0.9.0-rc.0"
+env_logger = "0.6"
+log = "0.4.11"
+tokio = "0.2.22"
+dotenv = "0.15.0"
