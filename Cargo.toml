@@ -13,3 +13,5 @@ log = "0.4.11"
 tokio = "0.2.22"
 dotenv = "0.15.0"
 sqlx = { version = "0.4", features = [ "sqlite" ] }
+reqwest = "0.10.7"
+soup = "0.5.0"

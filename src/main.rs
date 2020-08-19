@@ -22,6 +22,8 @@ use sqlx::{Connect, SqliteConnection, SqlitePool};
 use crate::db::{database_connect, initialise_database_tables};
 
 mod db;
+mod commands;
+mod utils;
 
 struct Db;
 
@@ -34,10 +36,6 @@ impl TypeMapKey for Db {
 #[commands(ping)]
 struct General;
 
-// #[group]
-// #[prefixes("bn", "boxnovel")]
-// #[commands(connect)]
-// struct Boxnovel;
 
 struct Handler;
 
@@ -54,7 +52,9 @@ async fn main() {
     let token = env::var("TOKEN")
         .expect("Expected a token. None found");
     let framework = StandardFramework::new()
-        .configure(|c| c.prefix("f!"))
+        .configure(|c| c
+            .prefix("f!")
+            .case_insensitivity(true))
         .group(&GENERAL_GROUP);
     let mut client = Client::new(&token)
         .event_handler(Handler)
