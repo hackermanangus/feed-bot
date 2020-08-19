@@ -1,4 +1,4 @@
-mod structures;
+pub mod structures;
 
 use std::env;
 
@@ -24,9 +24,12 @@ use sqlx::{Connect, SqliteConnection, SqlitePool};
 use crate::db::{database_connect, initialise_database_tables};
 
 mod db;
-mod commands;
 mod utils;
+mod commands;
 
+use crate::commands::{
+    boxnovel::boxnovel
+};
 struct Db;
 
 impl TypeMapKey for Db {
@@ -38,6 +41,10 @@ impl TypeMapKey for Db {
 #[commands(ping)]
 struct General;
 
+#[group]
+#[prefixes(bn, boxnovel)]
+#[commands(add)]
+struct Boxnovel;
 
 struct Handler;
 

@@ -1,8 +1,8 @@
 pub mod main {
 
     pub struct Chapter {
-        title: String,
-        link: String,
+        pub title: String,
+        pub link: String,
     }
 
     impl Chapter {
@@ -15,9 +15,9 @@ pub mod main {
     }
 
     pub struct Novel {
-        title: String,
-        link: String,
-        chapters: Vec<Chapter>,
+        pub title: String,
+        pub link: String,
+        pub chapters: Vec<Chapter>,
     }
     impl Novel {
         pub fn new(title: String, link: String, chapters: Vec<Chapter>) -> Novel {

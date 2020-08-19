@@ -9,7 +9,7 @@ pub mod boxnovel_fetcher {
         Error as SqlError,
     };
     use crate::Db;
-    pub async fn handle(db: &SqlitePool, link: String, c_id: String, g_id: String) -> Result<(), String> {
+    pub async fn handle(db: &SqlitePool, link: String, c_id: String, g_id: String) -> Result<String, String> {
         let before = fetch(link).await;
         let result = match before {
             Ok(x) => x,
@@ -21,15 +21,31 @@ pub mod boxnovel_fetcher {
             None => return Err("Unable to locate chapters".to_string())
         };
 
+        let after = insert_into_db(db, c_id, g_id, new_novel).await;
+        return match after {
+            Ok(x) => Ok("Success".to_string()),
+            Err(e) => Err(e.to_string())
+        };
+
 
 
     }
-    pub async fn insert_into_db(db: &SqlitePool, c_id: String, g_id: String, n: Novel) -> Result<u64, SqlError> {
+    async fn insert_into_db(db: &SqlitePool, c_id: String, g_id: String, n: Novel) -> Result<u64, SqlError> {
         /// Inserts the Novel into the database to be monitored.
         /// Additionally add the channel_id and guild_id
-        let result = sqlx::query("INSERT INTO boxnovel
+        let mut pool = db.acquire().await?;
+        let mut query = sqlx::query("INSERT INTO boxnovel
                 VALUES (?, ?, ?, ?)
-        ");
+        ")
+            .bind(g_id)
+            .bind(c_id)
+            .bind(n.link)
+            .bind(n.chapters
+                .iter()
+                .map(|mut s| format!("{} ", s.link))
+                .collect::<String>()
+            ).execute(&mut pool).await;
+        query
     }
     async fn fetch(lk: String) -> Result<String, reqwest::Error>{
         let client = reqwest::Client::new();

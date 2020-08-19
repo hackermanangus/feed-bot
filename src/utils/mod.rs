@@ -1,1 +1,1 @@
-mod boxnovel_fetcher;
+pub mod boxnovel_fetcher;
