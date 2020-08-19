@@ -1,3 +1,5 @@
+mod structures;
+
 use std::env;
 
 use dotenv;
