@@ -23,11 +23,13 @@ pub mod boxnovel {
     #[command]
     async fn add(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
         let mut data = ctx.data.read().await;
-        data.get::<Db>()?;
+        let db = data.get::<Db>().unwrap();
 
-        let guild_id = msg.guild_id.to_string();
+        let guild_id = msg.guild_id.unwrap().to_string();
         let channel_id = msg.channel_id.to_string();
 
         let novel: String = args.single::<String>()?;
+
+        Ok(())
     }
 }

@@ -6,7 +6,7 @@ pub mod main {
     }
 
     impl Chapter {
-        pub async fn new(title: String, link: String) -> Chapter {
+        pub fn new(title: String, link: String) -> Chapter {
             Chapter {
                 title,
                 link
@@ -20,7 +20,7 @@ pub mod main {
         chapters: Vec<Chapter>,
     }
     impl Novel {
-        pub async fn new(title: String, link: String, chapters: Vec<Chapter>) -> Novel {
+        pub fn new(title: String, link: String, chapters: Vec<Chapter>) -> Novel {
             Novel {
                 title,
                 link,
