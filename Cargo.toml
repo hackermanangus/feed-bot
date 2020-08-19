@@ -12,3 +12,4 @@ env_logger = "0.6"
 log = "0.4.11"
 tokio = "0.2.22"
 dotenv = "0.15.0"
+sqlx = { version = "0.4", features = [ "sqlite" ] }
