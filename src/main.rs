@@ -1,9 +1,6 @@
-pub mod structures;
-
 use std::env;
 
 use dotenv;
-use log::error;
 use serenity::{
     async_trait,
     prelude::*,
@@ -19,17 +16,19 @@ use serenity::framework::standard::{
 use serenity::model::channel::Message;
 use serenity::model::prelude::Ready;
 use serenity::prelude::{Context, EventHandler};
-use sqlx::{Connect, SqliteConnection, SqlitePool};
+use sqlx::SqlitePool;
 
+use crate::commands::{
+    boxnovel::*
+};
 use crate::db::{database_connect, initialise_database_tables};
+
+pub mod structures;
 
 mod db;
 mod utils;
 mod commands;
 
-use crate::commands::{
-    boxnovel::boxnovel::ADD_COMMAND
-};
 struct Db;
 
 impl TypeMapKey for Db {
@@ -72,7 +71,7 @@ async fn main() {
         .await
         .expect("Error creating client");
 
-    let mut db = match database_connect().await {
+    let db = match database_connect().await {
         Ok(d) => d,
         Err(e) => {
             panic!("Couldn't connect database {}", e);
@@ -88,8 +87,6 @@ async fn main() {
     if let Err(why) = client.start().await {
         println!("Err with client: {:?}", why);
     }
-
-
 }
 
 #[command]
