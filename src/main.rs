@@ -28,7 +28,7 @@ mod utils;
 mod commands;
 
 use crate::commands::{
-    boxnovel::boxnovel
+    boxnovel::boxnovel::ADD_COMMAND
 };
 struct Db;
 
@@ -64,7 +64,8 @@ async fn main() {
         .configure(|c| c
             .prefix("f!")
             .case_insensitivity(true))
-        .group(&GENERAL_GROUP);
+        .group(&GENERAL_GROUP)
+        .group(&BOXNOVEL_GROUP);
     let mut client = Client::new(&token)
         .event_handler(Handler)
         .framework(framework)
@@ -80,14 +81,15 @@ async fn main() {
     if let Err(e) = initialise_database_tables(&mut db.acquire().await.unwrap()).await {
         panic!("Couldn't setup table {}", e);
     }
-    if let Err(why) = client.start().await {
-        println!("Err with client: {:?}", why);
-    }
-
     {
         let mut data = client.data.write().await;
         data.insert::<Db>(db);
     }
+    if let Err(why) = client.start().await {
+        println!("Err with client: {:?}", why);
+    }
+
+
 }
 
 #[command]

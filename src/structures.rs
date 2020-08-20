@@ -1,5 +1,5 @@
 pub mod main {
-
+    #[derive(Debug)]
     pub struct Chapter {
         pub title: String,
         pub link: String,
@@ -13,7 +13,7 @@ pub mod main {
             }
         }
     }
-
+    #[derive(Debug)]
     pub struct Novel {
         pub title: String,
         pub link: String,
