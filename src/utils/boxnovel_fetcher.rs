@@ -1,11 +1,10 @@
-
-
 use regex::Regex;
 use soup::{NodeExt, QueryBuilderExt};
 use sqlx::{
     Error as SqlError,
     sqlite::SqlitePool,
 };
+use tokio::task;
 
 use crate::structures::{Chapter, Novel};
 
@@ -15,10 +14,15 @@ pub async fn handle(db: &SqlitePool, link: String, c_id: String, g_id: String) -
         Ok(x) => x,
         Err(e) => return Err(format!("Invalid link provided [{}]", e))
     };
-    let new_novel_unhandled = handle_soup(result, link).await;
+    let new_novel_unhandled = task::spawn_blocking(move || {
+        handle_soup(result, link)
+    }).await;
     let new_novel = match new_novel_unhandled {
-        Some(n) => n,
-        None => return Err("Unable to locate chapters".to_string())
+        Ok(ok) => match ok {
+            Some(s) => s,
+            None => return Err("Unable to locate chapters".to_string()),
+        }
+        Err(_) => return Err("Unable to locate chapters".to_string())
     };
 
     let after = insert_into_db(db, c_id, g_id, new_novel).await;
@@ -55,7 +59,7 @@ async fn fetch(lk: &String) -> Result<String, reqwest::Error> {
     Ok(result)
 }
 
-async fn handle_soup(s: String, lk: String) -> Option<Novel> {
+fn handle_soup(s: String, lk: String) -> Option<Novel> {
     let soup = soup::Soup::new(&s);
     let result = soup.tag("div")
         .attr("class", "post-title")
