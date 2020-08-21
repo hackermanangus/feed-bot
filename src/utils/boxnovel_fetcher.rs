@@ -8,14 +8,60 @@ use tokio::task;
 
 use crate::structures::{Chapter, Novel};
 
-pub async fn handle(db: &SqlitePool, link: String, c_id: String, g_id: String) -> Result<String, String> {
+/// Build client and fetch the page
+async fn fetch(lk: &String) -> Result<String, reqwest::Error> {
+    let client = reqwest::Client::new();
+    let result = client.post(lk)
+        .send()
+        .await?
+        .text()
+        .await?;
+    Ok(result)
+}
+
+/// Delete a channel from the database so it no longer sends updates
+pub async fn delete_handle_channel(db: &SqlitePool, link: String, c_id: String) -> Result<String, String> {
+    let mut pool = db.acquire().await.unwrap();
+    let query = sqlx::query("DELETE FROM boxnovel
+        WHERE channel_id=? AND novel=?
+    ")
+        .bind(c_id.clone())
+        .bind(link.clone())
+        .execute(&mut pool).await;
+    return match query {
+        Ok(_) => Ok(format!("<{}> has been removed from <#{}>", link, c_id)),
+        Err(_) => Err(format!("Failed to remove <{}> from <#{}>. Novel not found linked to this channel", link, c_id, ))
+    };
+}
+
+/// Delete a novel from the entire guild so it no longer gets updates
+pub async fn delete_handle_guild(db: &SqlitePool, link: String, g_id: String) -> Result<String, String> {
+    let mut pool = db.acquire().await.unwrap();
+    let query = sqlx::query("DELETE FROM boxnovel
+        WHERE guild_id=? AND novel=?
+
+    ")
+        .bind(g_id.clone())
+        .bind(link.clone())
+        .execute(&mut pool).await;
+    return match query {
+        Ok(_) => Ok(format!("<{}> has been removed from from all channels", link)),
+        Err(_) => Err(format!("Failed to remove <{}> from all channels. Novel not found linked to any channel", link))
+    };
+}
+
+/// Handles the insertion into the SQLite database
+pub async fn initial_handle(db: &SqlitePool, link: String, c_id: String, g_id: String) -> Result<String, String> {
+
+    // Every Err() is returning to the discord command where the message is sent to the user,
     let before = fetch(&link).await;
     let result = match before {
         Ok(x) => x,
         Err(e) => return Err(format!("Invalid link provided [{}]", e))
     };
+    // Using tokio spawn_blocking because the soup crate is non-async
     let new_novel_unhandled = task::spawn_blocking(move || {
-        handle_soup(result, link)
+        process_soup(result, link)
     }).await;
     let new_novel = match new_novel_unhandled {
         Ok(ok) => match ok {
@@ -32,6 +78,7 @@ pub async fn handle(db: &SqlitePool, link: String, c_id: String, g_id: String) -
     };
 }
 
+/// Inserts a new novel into the SQLite database
 async fn insert_into_db(db: &SqlitePool, c_id: String, g_id: String, n: Novel) -> Result<u64, SqlError> {
     let mut pool = db.acquire().await?;
     let query = sqlx::query("INSERT INTO boxnovel
@@ -49,17 +96,8 @@ async fn insert_into_db(db: &SqlitePool, c_id: String, g_id: String, n: Novel) -
     query
 }
 
-async fn fetch(lk: &String) -> Result<String, reqwest::Error> {
-    let client = reqwest::Client::new();
-    let result = client.post(lk)
-        .send()
-        .await?
-        .text()
-        .await?;
-    Ok(result)
-}
-
-fn handle_soup(s: String, lk: String) -> Option<Novel> {
+/// Gathers the information needed from the boxnovel html
+fn process_soup(s: String, lk: String) -> Option<Novel> {
     let soup = soup::Soup::new(&s);
     let result = soup.tag("div")
         .attr("class", "post-title")
@@ -88,6 +126,9 @@ fn handle_soup(s: String, lk: String) -> Option<Novel> {
     //         Chapter::new(i.to_string(), j.to_string())
     //     )
     // }
+
+    // Opted to map instead of a for loop for a more concise way to see what's happening
+    // Also slightly more efficient I think
     let vec_chapters: Vec<Chapter> = ch_titles
         .iter().rev()
         .zip(ch_links.iter().rev())
@@ -97,10 +138,9 @@ fn handle_soup(s: String, lk: String) -> Option<Novel> {
     Some(Novel::new(title, lk, vec_chapters))
 }
 
+/// REMOVES ALL THE WEIRD WHITESPACES, TABS, NEW LINES
 fn clear(s: String) -> String {
     let re = Regex::new(r"[^a-zA-Z0-9]\s").unwrap();
-
-    // REMOVES ALL THE WEIRD WHITESPACES, TABS, NEW LINES
     let s = s.replace("	", "");
     let s = s.replace("\n", "");
     let s = re.replace_all(&s, "").to_string();

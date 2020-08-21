@@ -42,7 +42,7 @@ struct General;
 
 #[group]
 #[prefixes(bn, boxnovel)]
-#[commands(add)]
+#[commands(add, remove)]
 struct Boxnovel;
 
 struct Handler;
