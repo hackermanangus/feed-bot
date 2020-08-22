@@ -3,9 +3,11 @@ use sqlx::{
     prelude::*,
     sqlite::SqlitePool,
 };
+use std::env;
 
 pub async fn database_connect() -> Result<SqlitePool, SqlError> {
-    SqlitePool::new("sqlite::feed.db").await
+    let path = env::var("DATABASE_URL").expect("No DATABASE_URL found");
+    SqlitePool::new(&*path).await
 }
 
 pub async fn initialise_database_tables<C: Executor>(db: &mut C) -> Result<u64, SqlError> {

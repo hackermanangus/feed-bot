@@ -30,7 +30,7 @@ async fn remove(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
 
     let channel_id = || msg.channel_id.to_string();
     let novel = args.single::<String>()?;
-    let flag = args.single::<String>()?;
+    let flag = args.single::<String>().unwrap_or_else(|| "default".to_string());
     let result = match flag.as_str() {
         // Checking if it's a DM channel
         "-g" if guild_id() != "0"  => delete_handle_guild(db, novel, guild_id()).await,
@@ -64,6 +64,15 @@ async fn add(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
         Ok(x) => msg.channel_id.say(&ctx.http, x).await?,
         Err(e) => msg.channel_id.say(&ctx.http, e).await?
     };
+
+    Ok(())
+}
+
+#[command]
+async fn test(ctx: &Context, msg: &Message) -> CommandResult {
+    let data = ctx.data.read().await;
+    let db = data.get::<Db>().unwrap();
+    check_updates_all(db).await;
 
     Ok(())
 }

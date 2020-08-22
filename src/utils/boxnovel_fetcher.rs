@@ -1,12 +1,11 @@
 use regex::Regex;
 use soup::{NodeExt, QueryBuilderExt};
-use sqlx::{
-    Error as SqlError,
-    sqlite::SqlitePool,
+use sqlx::{Error as SqlError,
+           sqlite::SqlitePool,
 };
 use tokio::task;
 
-use crate::structures::{Chapter, Novel};
+use crate::structures::*;
 
 /// Build client and fetch the page
 async fn fetch(lk: &String) -> Result<String, reqwest::Error> {
@@ -17,6 +16,21 @@ async fn fetch(lk: &String) -> Result<String, reqwest::Error> {
         .text()
         .await?;
     Ok(result)
+}
+
+pub(crate) async fn check_updates_all(db: &SqlitePool) -> Result<(), String> {
+    let mut pool = db.acquire().await.unwrap();
+    let cursor = sqlx::query_as!(SQLResultBoxnovel,
+    "SELECT * FROM boxnovel").fetch_all(&mut pool).await;
+    let cursor = match cursor {
+        Ok(inner) => inner,
+        Err(e) => return e.to_string()
+    };
+
+    println!("{:?}", &cursor[0].convert().await);
+
+    Ok(())
+
 }
 
 /// Delete a channel from the database so it no longer sends updates
