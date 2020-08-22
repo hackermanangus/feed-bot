@@ -30,7 +30,7 @@ async fn remove(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
 
     let channel_id = || msg.channel_id.to_string();
     let novel = args.single::<String>()?;
-    let flag = args.single::<String>().unwrap_or_else(|| "default".to_string());
+    let flag = args.single::<String>().unwrap_or_else(|_| "default".to_string());
     let result = match flag.as_str() {
         // Checking if it's a DM channel
         "-g" if guild_id() != "0"  => delete_handle_guild(db, novel, guild_id()).await,
@@ -68,6 +68,34 @@ async fn add(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
     Ok(())
 }
 
+#[command]
+async fn check(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
+    let data = ctx.data.read().await;
+    let db = data.get::<Db>().unwrap();
+    let guild_id= || {
+        let g_id = msg.guild_id;
+        let guild_id = match g_id {
+            Some(x) => x.to_string(),
+            None => 0.to_string()
+        };
+        guild_id
+    };
+
+    let channel_id = || msg.channel_id.to_string();
+    let flag = args.single::<String>().unwrap_or_else( |_| "default".to_string());
+    let result = match flag.as_str() {
+        // Checking if it's a DM channel
+        "-g" if guild_id() != "0"  => retrieve_handle_guild(db, guild_id()).await,
+        _ => retrieve_handle_channel(db, channel_id()).await
+    };
+
+    match result {
+        Ok(x) => msg.channel_id.say(&ctx.http, x).await?,
+        Err(e) => msg.channel_id.say(&ctx.http, e).await?
+    };
+
+    Ok(())
+}
 #[command]
 async fn test(ctx: &Context, msg: &Message) -> CommandResult {
     let data = ctx.data.read().await;

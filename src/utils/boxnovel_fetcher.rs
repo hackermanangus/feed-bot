@@ -17,14 +17,47 @@ async fn fetch(lk: &String) -> Result<String, reqwest::Error> {
         .await?;
     Ok(result)
 }
+pub async fn retrieve_handle_channel(db: &SqlitePool, c_id: String) -> Result<String, String> {
+    let mut pool = db.acquire().await.unwrap();
+    let cursor = sqlx::query_as!(SQLResultBoxnovel,
+    "SELECT * FROM boxnovel WHERE channel_id=?", c_id)
+        .fetch_all(&mut pool).await;
+    let cursor: Vec<SQLResultBoxnovel> = match cursor {
+        Ok(inner) => inner,
+        Err(_) => return Err(format!("No novels are linked to this channel"))
+    };
+    let novels = cursor
+        .iter()
+        .map(|x| x.novel.to_string())
+        .collect::<Vec<String>>()
+        .join(", ");
+    if novels == "" { return Err("No novels are linked to this channel".to_string()) }
+    Ok(novels)
+}
+pub async fn retrieve_handle_guild(db: &SqlitePool, g_id: String) -> Result<String, String> {
+    let mut pool = db.acquire().await.unwrap();
+    let cursor = sqlx::query_as!(SQLResultBoxnovel, "SELECT * FROM boxnovel WHERE guild_id=?", g_id)
+        .fetch_all(&mut pool).await;
+    let cursor: Vec<SQLResultBoxnovel> = match cursor {
+        Ok(inner) => inner,
+        Err(_) => return Err(format!("No novels are linked to this guild"))
+    };
+    let novels = cursor
+        .iter()
+        .map(|x| x.novel.to_string())
+        .collect::<Vec<String>>()
+        .join(", ");
+    if novels == "" { return Err("No novels are linked to this guild".to_string()) }
+    Ok(novels)
+}
 
-pub(crate) async fn check_updates_all(db: &SqlitePool) -> Result<(), String> {
+pub async fn check_updates_all(db: &SqlitePool) -> Result<(), String> {
     let mut pool = db.acquire().await.unwrap();
     let cursor = sqlx::query_as!(SQLResultBoxnovel,
     "SELECT * FROM boxnovel").fetch_all(&mut pool).await;
-    let cursor = match cursor {
+    let cursor: Vec<SQLResultBoxnovel> = match cursor {
         Ok(inner) => inner,
-        Err(e) => return e.to_string()
+        Err(e) => return Err(e.to_string())
     };
 
     println!("{:?}", &cursor[0].convert().await);
