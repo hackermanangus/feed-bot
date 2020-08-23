@@ -10,8 +10,6 @@ use crate::Db;
 use crate::utils::{
     boxnovel_fetcher::*,
 };
-use std::sync::Arc;
-use serenity::http::Http;
 
 #[command]
 #[aliases(rem, del, delete)]
@@ -21,7 +19,7 @@ async fn remove(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
     // TODO: Because of the way SQL Delete statements work
     let data = ctx.data.read().await;
     let db = data.get::<Db>().unwrap();
-    let guild_id= || {
+    let guild_id = || {
         let g_id = msg.guild_id;
         let guild_id = match g_id {
             Some(x) => x.to_string(),
@@ -35,7 +33,7 @@ async fn remove(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
     let flag = args.single::<String>().unwrap_or_else(|_| "default".to_string());
     let result = match flag.as_str() {
         // Checking if it's a DM channel
-        "-g" if guild_id() != "0"  => delete_handle_guild(db, novel, guild_id()).await,
+        "-g" if guild_id() != "0" => delete_handle_guild(db, novel, guild_id()).await,
         _ => delete_handle_channel(db, novel, channel_id()).await
     };
 
@@ -74,7 +72,7 @@ async fn add(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
 async fn check(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
     let data = ctx.data.read().await;
     let db = data.get::<Db>().unwrap();
-    let guild_id= || {
+    let guild_id = || {
         let g_id = msg.guild_id;
         let guild_id = match g_id {
             Some(x) => x.to_string(),
@@ -84,10 +82,10 @@ async fn check(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
     };
 
     let channel_id = || msg.channel_id.to_string();
-    let flag = args.single::<String>().unwrap_or_else( |_| "default".to_string());
+    let flag = args.single::<String>().unwrap_or_else(|_| "default".to_string());
     let result = match flag.as_str() {
         // Checking if it's a DM channel
-        "-g" if guild_id() != "0"  => retrieve_handle_guild(db, guild_id()).await,
+        "-g" if guild_id() != "0" => retrieve_handle_guild(db, guild_id()).await,
         _ => retrieve_handle_channel(db, channel_id()).await
     };
 
@@ -98,12 +96,9 @@ async fn check(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
 
     Ok(())
 }
+
 #[command]
-async fn test(ctx: &Context, msg: &Message) -> CommandResult {
-    let data = ctx.data.read().await;
-    let db = data.get::<Db>().unwrap();
-    let http = &ctx.http;
-    check_updates_all(db, http).await;
+async fn test(_ctx: &Context, _msg: &Message) -> CommandResult {
     Ok(())
 }
 

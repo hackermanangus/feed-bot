@@ -14,6 +14,7 @@ use serenity::framework::standard::{
     StandardFramework,
 };
 use serenity::model::channel::Message;
+use serenity::model::id::GuildId;
 use serenity::model::prelude::Ready;
 use serenity::prelude::{Context, EventHandler};
 use sqlx::SqlitePool;
@@ -22,10 +23,9 @@ use crate::commands::{
     boxnovel::*
 };
 use crate::db::{database_connect, initialise_database_tables};
-use std::sync::Arc;
-use serenity::http::Http;
-use serenity::model::id::GuildId;
 use crate::utils::boxnovel_fetcher::check_updates_all;
+use tokio::time::Duration;
+use serenity::static_assertions::_core::sync::atomic::{AtomicBool, Ordering::Relaxed};
 
 pub mod structures;
 
@@ -53,16 +53,23 @@ struct Handler;
 
 #[async_trait]
 impl EventHandler for Handler {
+    async fn cache_ready(&self, ctx: Context, _guild: Vec<GuildId>) {
+        let active = AtomicBool::new(false);
+        if active.load(Relaxed) == false {
+            let _ = tokio::spawn(async move {
+                loop {
+                    active.store(true, Relaxed);
+                    tokio::time::delay_for(Duration::from_secs(600)).await;
+                    let http = &ctx.http;
+                    let data = ctx.data.read().await;
+                    let db = data.get::<Db>().unwrap();
+                    let _ = check_updates_all(db, http).await;
+                }
+            }).await;
+        }
+    }
     async fn ready(&self, _: Context, ready: Ready) {
         println!("{} is connected", ready.user.name);
-    }
-    async fn cache_ready(&self, ctx: Context, guild: Vec<GuildId>) {
-        let http = ctx.http;
-        let data =  ctx.data.read().await;
-        let db = data.get::<Db>().unwrap();
-
-
-        check_updates_all(db, &http);
     }
 }
 
@@ -92,7 +99,6 @@ async fn main() {
     if let Err(e) = initialise_database_tables(&mut db.acquire().await.unwrap()).await {
         panic!("Couldn't setup table {}", e);
     }
-    let http: Arc<Http> = Arc::clone(&client.cache_and_http.http);
     {
         let mut data = client.data.write().await;
         data.insert::<Db>(db);

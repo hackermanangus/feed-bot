@@ -1,5 +1,10 @@
+use std::sync::Arc;
+
 use regex::Regex;
 use serenity::futures::{stream, StreamExt};
+use serenity::http::Http;
+use serenity::model::id::ChannelId;
+use serenity::utils::Colour;
 use soup::{NodeExt, QueryBuilderExt};
 use sqlx::{Error as SqlError,
            sqlite::SqlitePool,
@@ -7,9 +12,6 @@ use sqlx::{Error as SqlError,
 use tokio::task;
 
 use crate::structures::*;
-use serenity::model::{id::ChannelId, channel::Embed};
-use std::sync::Arc;
-use serenity::http::Http;
 
 /// Build client and fetch the page
 async fn fetch(lk: &String) -> Result<String, reqwest::Error> {
@@ -105,25 +107,25 @@ pub async fn check_updates_all(db: &SqlitePool, http: &Arc<Http>) -> Result<(), 
             Err(_) => return Err("Unable to locate chapters".to_string())
         };
         let process_stream = stream::iter(novel.current.clone());
-        let mut rev_true_chapters = process_stream
+        let rev_true_chapters = process_stream
             .filter_map(|x| async {
-                if !current.current.contains(&x) {Some(x) }
-                else { None } })
+                if !current.current.contains(&x) { Some(x) } else { None }
+            })
             .collect::<Vec<String>>().await;
         let true_chapters = task::spawn_blocking(move || {
-            rev_true_chapters.iter().rev().map(|x|x.to_string()).collect::<Vec<String>>()
+            rev_true_chapters.iter().rev().map(|x| x.to_string()).collect::<Vec<String>>()
         }).await.unwrap();
         let mut true_stream = stream::iter(true_chapters);
         while let Some(ch) = true_stream.next().await {
             let channel = ChannelId(current.c_id.parse::<u64>().unwrap());
-            channel.send_message(http, |m| {
-                m.embed(|mut e| {
+            let _ = channel.send_message(http, |m| {
+                m.embed(|e| {
                     e.title(format!("New Chapter for {}", &novel.title));
                     e.url(&ch);
-                    e.description(&ch)
+                    e.description(&ch);
+                    e.colour(Colour::DARK_GOLD)
                 });
                 m
-
             }).await;
             update_handle(db, novel.convert().await).await;
         }
@@ -134,13 +136,14 @@ pub async fn check_updates_all(db: &SqlitePool, http: &Arc<Http>) -> Result<(), 
 ///Update a row in the table
 async fn update_handle(db: &SqlitePool, sqlbox: SQLResultBoxnovel) {
     let mut pool = db.acquire().await.unwrap();
-    let query = sqlx::query("UPDATE boxnovel SET
+    let _ = sqlx::query("UPDATE boxnovel SET
                 current=? WHERE novel=?
         ")
         .bind(sqlbox.current)
         .bind(sqlbox.novel)
         .execute(&mut pool).await;
 }
+
 /// Delete a channel from the database so it no longer sends updates
 pub async fn delete_handle_channel(db: &SqlitePool, link: String, c_id: String) -> Result<String, String> {
     let mut pool = db.acquire().await.unwrap();
