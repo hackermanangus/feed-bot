@@ -98,7 +98,6 @@ pub async fn check_updates_all(db: &SqlitePool, http: &Arc<Http>) -> Result<(), 
         let new = task::spawn_blocking(move || {
             process_soup(html, boxnovel.novel, boxnovel.channel_id, boxnovel.guild_id)
         }).await;
-
         let novel = match new {
             Ok(ok) => match ok {
                 Some(s) => s.convert().await,
@@ -115,20 +114,24 @@ pub async fn check_updates_all(db: &SqlitePool, http: &Arc<Http>) -> Result<(), 
         let true_chapters = task::spawn_blocking(move || {
             rev_true_chapters.iter().rev().map(|x| x.to_string()).collect::<Vec<String>>()
         }).await.unwrap();
-        let mut true_stream = stream::iter(true_chapters);
-        while let Some(ch) = true_stream.next().await {
-            let channel = ChannelId(current.c_id.parse::<u64>().unwrap());
-            let _ = channel.send_message(http, |m| {
-                m.embed(|e| {
-                    e.title(format!("New Chapter for {}", &novel.title));
-                    e.url(&ch);
-                    e.description(&ch);
-                    e.colour(Colour::DARK_GOLD)
-                });
-                m
-            }).await;
-            update_handle(db, novel.convert().await).await;
-        }
+
+        let true_stream = stream::iter(true_chapters);
+        let desc = true_stream.map(|x| {
+            format!{"{}\n\n", x}
+            })
+            .collect::<String>().await;
+
+        let channel = ChannelId(current.c_id.parse::<u64>().unwrap());
+        let _ = channel.send_message(http, |m| {
+            m.embed(|e| {
+                e.title(format!("New chapters for {}", &novel.title));
+                e.url(&novel.novel);
+                e.description(desc);
+                e.colour(Colour::DARK_GOLD)
+            });
+            m
+        }).await;
+        update_handle(db, novel.convert().await).await;
     }
     Ok(())
 }

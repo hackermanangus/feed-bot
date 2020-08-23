@@ -59,11 +59,12 @@ impl EventHandler for Handler {
             let _ = tokio::spawn(async move {
                 loop {
                     active.store(true, Relaxed);
-                    tokio::time::delay_for(Duration::from_secs(600)).await;
+
                     let http = &ctx.http;
                     let data = ctx.data.read().await;
                     let db = data.get::<Db>().unwrap();
                     let _ = check_updates_all(db, http).await;
+                    tokio::time::delay_for(Duration::from_secs(600)).await;
                 }
             }).await;
         }
