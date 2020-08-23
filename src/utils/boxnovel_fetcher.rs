@@ -1,5 +1,5 @@
 use regex::Regex;
-use serenity::futures::{stream, StreamExt, TryFutureExt};
+use serenity::futures::{stream, StreamExt};
 use soup::{NodeExt, QueryBuilderExt};
 use sqlx::{Error as SqlError,
            sqlite::SqlitePool,
@@ -7,6 +7,9 @@ use sqlx::{Error as SqlError,
 use tokio::task;
 
 use crate::structures::*;
+use serenity::model::{id::ChannelId, channel::Embed};
+use std::sync::Arc;
+use serenity::http::Http;
 
 /// Build client and fetch the page
 async fn fetch(lk: &String) -> Result<String, reqwest::Error> {
@@ -72,7 +75,7 @@ pub async fn retrieve_handle_guild(db: &SqlitePool, g_id: String) -> Result<Stri
 /// TODO: We need to compare the two and then send a message
 /// TODO: We have already retrieved the old and the new one, we just need to match them against each other
 ///
-pub async fn check_updates_all(db: &SqlitePool) -> Result<(), String> {
+pub async fn check_updates_all(db: &SqlitePool, http: &Arc<Http>) -> Result<(), String> {
     // Retrieving ALL SQL ROWS here
     let mut pool = db.acquire().await.unwrap();
     let cursor = sqlx::query_as!(SQLResultBoxnovel,
@@ -96,19 +99,48 @@ pub async fn check_updates_all(db: &SqlitePool) -> Result<(), String> {
 
         let novel = match new {
             Ok(ok) => match ok {
-                Some(s) => s,
+                Some(s) => s.convert().await,
                 None => return Err("Unable to locate chapters".to_string()),
             }
             Err(_) => return Err("Unable to locate chapters".to_string())
         };
+        let process_stream = stream::iter(novel.current.clone());
+        let mut rev_true_chapters = process_stream
+            .filter_map(|x| async {
+                if !current.current.contains(&x) {Some(x) }
+                else { None } })
+            .collect::<Vec<String>>().await;
+        let true_chapters = task::spawn_blocking(move || {
+            rev_true_chapters.iter().rev().map(|x|x.to_string()).collect::<Vec<String>>()
+        }).await.unwrap();
+        let mut true_stream = stream::iter(true_chapters);
+        while let Some(ch) = true_stream.next().await {
+            let channel = ChannelId(current.c_id.parse::<u64>().unwrap());
+            channel.send_message(http, |m| {
+                m.embed(|mut e| {
+                    e.title(format!("New Chapter for {}", &novel.title));
+                    e.url(&ch);
+                    e.description(&ch)
+                });
+                m
+
+            }).await;
+            update_handle(db, novel.convert().await).await;
+        }
     }
     Ok(())
 }
 
 ///Update a row in the table
-/// TODO: NOT DONE YET DO NOT USE
-async fn update_handle(db: &SqlitePool, boxnovel: SQLResultBoxnovel) {}
-
+async fn update_handle(db: &SqlitePool, sqlbox: SQLResultBoxnovel) {
+    let mut pool = db.acquire().await.unwrap();
+    let query = sqlx::query("UPDATE boxnovel SET
+                current=? WHERE novel=?
+        ")
+        .bind(sqlbox.current)
+        .bind(sqlbox.novel)
+        .execute(&mut pool).await;
+}
 /// Delete a channel from the database so it no longer sends updates
 pub async fn delete_handle_channel(db: &SqlitePool, link: String, c_id: String) -> Result<String, String> {
     let mut pool = db.acquire().await.unwrap();
@@ -174,10 +206,11 @@ pub async fn initial_handle(db: &SqlitePool, link: String, c_id: String, g_id: S
 async fn insert_into_db(db: &SqlitePool, sqlbox: SQLResultBoxnovel) -> Result<u64, SqlError> {
     let mut pool = db.acquire().await?;
     let query = sqlx::query("INSERT INTO boxnovel
-                VALUES (?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?)
         ")
         .bind(sqlbox.guild_id)
         .bind(sqlbox.channel_id)
+        .bind(sqlbox.title)
         .bind(sqlbox.novel)
         .bind(sqlbox.current)
         .execute(&mut pool).await;
@@ -212,6 +245,7 @@ fn process_soup(s: String, lk: String, c_id: String, g_id: String) -> Option<SQL
     Some(SQLResultBoxnovel {
         guild_id: g_id,
         channel_id: c_id,
+        title,
         novel: lk,
         current: ch_links,
     })

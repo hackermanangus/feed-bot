@@ -22,6 +22,10 @@ use crate::commands::{
     boxnovel::*
 };
 use crate::db::{database_connect, initialise_database_tables};
+use std::sync::Arc;
+use serenity::http::Http;
+use serenity::model::id::GuildId;
+use crate::utils::boxnovel_fetcher::check_updates_all;
 
 pub mod structures;
 
@@ -52,6 +56,14 @@ impl EventHandler for Handler {
     async fn ready(&self, _: Context, ready: Ready) {
         println!("{} is connected", ready.user.name);
     }
+    async fn cache_ready(&self, ctx: Context, guild: Vec<GuildId>) {
+        let http = ctx.http;
+        let data =  ctx.data.read().await;
+        let db = data.get::<Db>().unwrap();
+
+
+        check_updates_all(db, &http);
+    }
 }
 
 #[tokio::main]
@@ -80,6 +92,7 @@ async fn main() {
     if let Err(e) = initialise_database_tables(&mut db.acquire().await.unwrap()).await {
         panic!("Couldn't setup table {}", e);
     }
+    let http: Arc<Http> = Arc::clone(&client.cache_and_http.http);
     {
         let mut data = client.data.write().await;
         data.insert::<Db>(db);
@@ -92,6 +105,5 @@ async fn main() {
 #[command]
 async fn ping(ctx: &Context, msg: &Message) -> CommandResult {
     msg.reply(ctx, "Pong").await?;
-
     Ok(())
 }

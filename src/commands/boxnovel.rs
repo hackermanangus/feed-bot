@@ -10,6 +10,8 @@ use crate::Db;
 use crate::utils::{
     boxnovel_fetcher::*,
 };
+use std::sync::Arc;
+use serenity::http::Http;
 
 #[command]
 #[aliases(rem, del, delete)]
@@ -100,8 +102,8 @@ async fn check(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
 async fn test(ctx: &Context, msg: &Message) -> CommandResult {
     let data = ctx.data.read().await;
     let db = data.get::<Db>().unwrap();
-    check_updates_all(db).await;
-
+    let http = &ctx.http;
+    check_updates_all(db, http).await;
     Ok(())
 }
 
