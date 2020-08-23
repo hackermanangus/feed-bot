@@ -6,6 +6,7 @@ use sqlx::{Error as SqlError,
 use tokio::task;
 
 use crate::structures::*;
+use serenity::futures::TryFutureExt;
 
 /// Build client and fetch the page
 async fn fetch(lk: &String) -> Result<String, reqwest::Error> {
@@ -17,6 +18,7 @@ async fn fetch(lk: &String) -> Result<String, reqwest::Error> {
         .await?;
     Ok(result)
 }
+//noinspection DuplicatedCode
 pub async fn retrieve_handle_channel(db: &SqlitePool, c_id: String) -> Result<String, String> {
     let mut pool = db.acquire().await.unwrap();
     let cursor = sqlx::query_as!(SQLResultBoxnovel,
@@ -26,14 +28,18 @@ pub async fn retrieve_handle_channel(db: &SqlitePool, c_id: String) -> Result<St
         Ok(inner) => inner,
         Err(_) => return Err(format!("No novels are linked to this channel"))
     };
-    let novels = cursor
-        .iter()
-        .map(|x| x.novel.to_string())
-        .collect::<Vec<String>>()
-        .join(", ");
+    let novels: String = task::spawn_blocking(move || {
+        cursor
+            .iter()
+            .map(|x| x.novel.to_string())
+            .collect::<Vec<String>>()
+            .join(", ")
+    }).await.unwrap_or_else(|_|"".to_string());
+
     if novels == "" { return Err("No novels are linked to this channel".to_string()) }
     Ok(novels)
 }
+/// Handles the retrieving of all linked novels in the guild
 pub async fn retrieve_handle_guild(db: &SqlitePool, g_id: String) -> Result<String, String> {
     let mut pool = db.acquire().await.unwrap();
     let cursor = sqlx::query_as!(SQLResultBoxnovel, "SELECT * FROM boxnovel WHERE guild_id=?", g_id)
@@ -42,15 +48,18 @@ pub async fn retrieve_handle_guild(db: &SqlitePool, g_id: String) -> Result<Stri
         Ok(inner) => inner,
         Err(_) => return Err(format!("No novels are linked to this guild"))
     };
-    let novels = cursor
-        .iter()
-        .map(|x| x.novel.to_string())
-        .collect::<Vec<String>>()
-        .join(", ");
+    let novels: String = task::spawn_blocking(move || {
+        cursor
+            .iter()
+            .map(|x| x.novel.to_string())
+            .collect::<Vec<String>>()
+            .join(", ")
+    }).await.unwrap_or_else(|_|"".to_string());
+
     if novels == "" { return Err("No novels are linked to this guild".to_string()) }
     Ok(novels)
 }
-
+/// Should be called in an async loop to track the updates of a novel
 pub async fn check_updates_all(db: &SqlitePool) -> Result<(), String> {
     let mut pool = db.acquire().await.unwrap();
     let cursor = sqlx::query_as!(SQLResultBoxnovel,
@@ -61,6 +70,7 @@ pub async fn check_updates_all(db: &SqlitePool) -> Result<(), String> {
     };
 
     println!("{:?}", &cursor[0].convert().await);
+
 
     Ok(())
 
@@ -133,13 +143,9 @@ async fn insert_into_db(db: &SqlitePool, c_id: String, g_id: String, n: Novel) -
         ")
         .bind(g_id)
         .bind(c_id)
-        .bind(n.link)
-        .bind(n.chapters
-            .iter()
-            .map(|s| format!("{} ", s.link))
-            .collect::<String>()
-        ).execute(&mut pool).await;
-
+        .bind(&n.link)
+        .bind(n.convert())
+        .execute(&mut pool).await;
     query
 }
 

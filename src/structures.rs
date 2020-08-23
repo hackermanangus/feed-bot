@@ -28,6 +28,13 @@ impl Novel {
             chapters,
         }
     }
+    pub fn convert(&self) -> String {
+        let result: String = self.chapters
+            .iter()
+            .map(|s| format!("{} ", s.link))
+            .collect::<String>();
+        result
+    }
 }
 
 #[derive(Debug)]
