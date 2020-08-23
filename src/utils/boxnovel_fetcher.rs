@@ -1,4 +1,5 @@
 use regex::Regex;
+use serenity::futures::{stream, StreamExt, TryFutureExt};
 use soup::{NodeExt, QueryBuilderExt};
 use sqlx::{Error as SqlError,
            sqlite::SqlitePool,
@@ -6,7 +7,6 @@ use sqlx::{Error as SqlError,
 use tokio::task;
 
 use crate::structures::*;
-use serenity::futures::TryFutureExt;
 
 /// Build client and fetch the page
 async fn fetch(lk: &String) -> Result<String, reqwest::Error> {
@@ -18,6 +18,7 @@ async fn fetch(lk: &String) -> Result<String, reqwest::Error> {
         .await?;
     Ok(result)
 }
+
 //noinspection DuplicatedCode
 pub async fn retrieve_handle_channel(db: &SqlitePool, c_id: String) -> Result<String, String> {
     let mut pool = db.acquire().await.unwrap();
@@ -28,17 +29,20 @@ pub async fn retrieve_handle_channel(db: &SqlitePool, c_id: String) -> Result<St
         Ok(inner) => inner,
         Err(_) => return Err(format!("No novels are linked to this channel"))
     };
+    // Blocking thread otherwise it will block the bot like the one under this
+    // piece of code
     let novels: String = task::spawn_blocking(move || {
         cursor
             .iter()
             .map(|x| x.novel.to_string())
             .collect::<Vec<String>>()
             .join(", ")
-    }).await.unwrap_or_else(|_|"".to_string());
+    }).await.unwrap_or_else(|_| "".to_string());
 
-    if novels == "" { return Err("No novels are linked to this channel".to_string()) }
+    if novels == "" { return Err("No novels are linked to this channel".to_string()); }
     Ok(novels)
 }
+
 /// Handles the retrieving of all linked novels in the guild
 pub async fn retrieve_handle_guild(db: &SqlitePool, g_id: String) -> Result<String, String> {
     let mut pool = db.acquire().await.unwrap();
@@ -48,33 +52,62 @@ pub async fn retrieve_handle_guild(db: &SqlitePool, g_id: String) -> Result<Stri
         Ok(inner) => inner,
         Err(_) => return Err(format!("No novels are linked to this guild"))
     };
+    // Had to make it an blocking thread because I realised
+    // that this would block
     let novels: String = task::spawn_blocking(move || {
         cursor
             .iter()
             .map(|x| x.novel.to_string())
             .collect::<Vec<String>>()
             .join(", ")
-    }).await.unwrap_or_else(|_|"".to_string());
+    }).await.unwrap_or_else(|_| "".to_string());
 
-    if novels == "" { return Err("No novels are linked to this guild".to_string()) }
+    if novels == "" { return Err("No novels are linked to this guild".to_string()); }
     Ok(novels)
 }
+
+//noinspection DuplicatedCode,DuplicatedCode
 /// Should be called in an async loop to track the updates of a novel
+/// TODO: Still working on this and it's not near done yet
+/// TODO: We need to compare the two and then send a message
+/// TODO: We have already retrieved the old and the new one, we just need to match them against each other
+///
 pub async fn check_updates_all(db: &SqlitePool) -> Result<(), String> {
+    // Retrieving ALL SQL ROWS here
     let mut pool = db.acquire().await.unwrap();
     let cursor = sqlx::query_as!(SQLResultBoxnovel,
     "SELECT * FROM boxnovel").fetch_all(&mut pool).await;
+    // Checking if they're not empty
     let cursor: Vec<SQLResultBoxnovel> = match cursor {
         Ok(inner) => inner,
         Err(e) => return Err(e.to_string())
     };
+    // Starting the process of updating the channels
+    let mut stream = stream::iter(cursor);
+    while let Some(boxnovel) = stream.next().await {
+        // Getting the currently stored novels in an array
+        let current = boxnovel.convert().await;
+        //println!("{:?}", &current); DEBUG PURPOSES
+        // Retrieve the possible updates html of the web page
+        let html = fetch(&boxnovel.novel).await.unwrap();
+        let new = task::spawn_blocking(move || {
+            process_soup(html, boxnovel.novel, boxnovel.channel_id, boxnovel.guild_id)
+        }).await;
 
-    println!("{:?}", &cursor[0].convert().await);
-
-
+        let novel = match new {
+            Ok(ok) => match ok {
+                Some(s) => s,
+                None => return Err("Unable to locate chapters".to_string()),
+            }
+            Err(_) => return Err("Unable to locate chapters".to_string())
+        };
+    }
     Ok(())
-
 }
+
+///Update a row in the table
+/// TODO: NOT DONE YET DO NOT USE
+async fn update_handle(db: &SqlitePool, boxnovel: SQLResultBoxnovel) {}
 
 /// Delete a channel from the database so it no longer sends updates
 pub async fn delete_handle_channel(db: &SqlitePool, link: String, c_id: String) -> Result<String, String> {
@@ -107,6 +140,7 @@ pub async fn delete_handle_guild(db: &SqlitePool, link: String, g_id: String) ->
     };
 }
 
+///noinspection DuplicateCode
 /// Handles the insertion into the SQLite database
 pub async fn initial_handle(db: &SqlitePool, link: String, c_id: String, g_id: String) -> Result<String, String> {
 
@@ -118,9 +152,10 @@ pub async fn initial_handle(db: &SqlitePool, link: String, c_id: String, g_id: S
     };
     // Using tokio spawn_blocking because the soup crate is non-async
     let new_novel_unhandled = task::spawn_blocking(move || {
-        process_soup(result, link)
+        process_soup(result, link, c_id, g_id)
     }).await;
-    let new_novel = match new_novel_unhandled {
+
+    let sqlbox = match new_novel_unhandled {
         Ok(ok) => match ok {
             Some(s) => s,
             None => return Err("Unable to locate chapters".to_string()),
@@ -128,7 +163,7 @@ pub async fn initial_handle(db: &SqlitePool, link: String, c_id: String, g_id: S
         Err(_) => return Err("Unable to locate chapters".to_string())
     };
 
-    let after = insert_into_db(db, c_id, g_id, new_novel).await;
+    let after = insert_into_db(db, sqlbox).await;
     return match after {
         Ok(_) => Ok("Success".to_string()),
         Err(e) => Err(e.to_string())
@@ -136,21 +171,21 @@ pub async fn initial_handle(db: &SqlitePool, link: String, c_id: String, g_id: S
 }
 
 /// Inserts a new novel into the SQLite database
-async fn insert_into_db(db: &SqlitePool, c_id: String, g_id: String, n: Novel) -> Result<u64, SqlError> {
+async fn insert_into_db(db: &SqlitePool, sqlbox: SQLResultBoxnovel) -> Result<u64, SqlError> {
     let mut pool = db.acquire().await?;
     let query = sqlx::query("INSERT INTO boxnovel
                 VALUES (?, ?, ?, ?)
         ")
-        .bind(g_id)
-        .bind(c_id)
-        .bind(&n.link)
-        .bind(n.convert())
+        .bind(sqlbox.guild_id)
+        .bind(sqlbox.channel_id)
+        .bind(sqlbox.novel)
+        .bind(sqlbox.current)
         .execute(&mut pool).await;
     query
 }
 
 /// Gathers the information needed from the boxnovel html
-fn process_soup(s: String, lk: String) -> Option<Novel> {
+fn process_soup(s: String, lk: String, c_id: String, g_id: String) -> Option<SQLResultBoxnovel> {
     let soup = soup::Soup::new(&s);
     let result = soup.tag("div")
         .attr("class", "post-title")
@@ -159,20 +194,14 @@ fn process_soup(s: String, lk: String) -> Option<Novel> {
         Some(x) => clear(x.text()),
         None => return None,
     };
-    let ch_titles: Vec<String> = soup.tag("li")
-        .attr("class", "wp-manga-chapter")
-        .limit(30)
-        .find_all()
-        .filter_map(|r| r.tag("a").find())
-        .map(|r| clear(r.text()))
-        .collect::<Vec<String>>();
-    let ch_links: Vec<String> = soup.tag("li")
+    let ch_links: String = soup.tag("li")
         .attr("class", "wp-manga-chapter")
         .limit(30)
         .find_all()
         .filter_map(|r| r.tag("a").find())
         .map(|r| r.get("href").unwrap())
-        .collect::<Vec<String>>();
+        .collect::<Vec<String>>()
+        .join(" ");
     // let mut vec_chapters: Vec<Chapter> = vec![];
     // for (i, j) in ch_titles.iter().rev().zip(ch_links.iter().rev()) {
     //     vec_chapters.push(
@@ -180,15 +209,12 @@ fn process_soup(s: String, lk: String) -> Option<Novel> {
     //     )
     // }
 
-    // Opted to map instead of a for loop for a more concise way to see what's happening
-    // Also slightly more efficient I think
-    let vec_chapters: Vec<Chapter> = ch_titles
-        .iter().rev()
-        .zip(ch_links.iter().rev())
-        .map(|(title, link)| Chapter::new(title.to_string(), link.to_string()))
-        .collect::<Vec<Chapter>>();
-
-    Some(Novel::new(title, lk, vec_chapters))
+    Some(SQLResultBoxnovel {
+        guild_id: g_id,
+        channel_id: c_id,
+        novel: lk,
+        current: ch_links,
+    })
 }
 
 /// REMOVES ALL THE WEIRD WHITESPACES, TABS, NEW LINES
