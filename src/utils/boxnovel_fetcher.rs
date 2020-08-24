@@ -117,21 +117,22 @@ pub async fn check_updates_all(db: &SqlitePool, http: &Arc<Http>) -> Result<(), 
 
         let true_stream = stream::iter(true_chapters);
         let desc = true_stream.map(|x| {
-            format!{"{}\n\n", x}
-            })
+            format! {"{}\n\n", x}
+        })
             .collect::<String>().await;
-
-        let channel = ChannelId(current.c_id.parse::<u64>().unwrap());
-        let _ = channel.send_message(http, |m| {
-            m.embed(|e| {
-                e.title(format!("New chapters for {}", &novel.title));
-                e.url(&novel.novel);
-                e.description(desc);
-                e.colour(Colour::DARK_GOLD)
-            });
-            m
-        }).await;
-        update_handle(db, novel.convert().await).await;
+        if desc != "" {
+            let channel = ChannelId(current.c_id.parse::<u64>().unwrap());
+            let _ = channel.send_message(http, |m| {
+                m.embed(|e| {
+                    e.title(format!("New chapters for {}", &novel.title));
+                    e.url(&novel.novel);
+                    e.description(desc);
+                    e.colour(Colour::DARK_GOLD)
+                });
+                m
+            }).await;
+            update_handle(db, novel.convert().await).await;
+        }
     }
     Ok(())
 }

@@ -174,8 +174,10 @@ dependencies = [
  "futures-io",
  "futures-util",
  "log",
+ "native-tls",
  "pin-project",
  "tokio",
+ "tokio-tls",
  "tungstenite",
 ]
 
@@ -1794,6 +1796,7 @@ dependencies = [
  "serde_json",
  "static_assertions",
  "tokio",
+ "tokio-tls",
  "typemap_rev",
  "url",
  "uwl",
@@ -2183,6 +2186,7 @@ dependencies = [
  "httparse",
  "input_buffer",
  "log",
+ "native-tls",
  "rand 0.7.3",
  "sha-1",
  "url",
