@@ -101,9 +101,9 @@ pub async fn check_updates_all(db: &SqlitePool, http: &Arc<Http>) -> Result<(), 
         let novel = match new {
             Ok(ok) => match ok {
                 Some(s) => s.convert().await,
-                None => return Err("Unable to locate chapters".to_string()),
+                None => return Err("Failed ```Unable to locate chapters```".to_string()),
             }
-            Err(_) => return Err("Unable to locate chapters".to_string())
+            Err(_) => return Err("Failed ```Unable to locate chapters```".to_string())
         };
         let process_stream = stream::iter(novel.current.clone());
         let rev_true_chapters = process_stream
@@ -159,7 +159,7 @@ pub async fn delete_handle_channel(db: &SqlitePool, link: String, c_id: String) 
         .execute(&mut pool).await;
     return match query {
         Ok(_) => Ok(format!("<{}> has been removed from <#{}>", link, c_id)),
-        Err(_) => Err(format!("Failed to remove <{}> from <#{}>. Novel not found linked to this channel", link, c_id, ))
+        Err(_) => Err(format!("Failed to remove <{}> from <#{}>. ```Novel not found linked to this channel```", link, c_id, ))
     };
 }
 
@@ -175,7 +175,7 @@ pub async fn delete_handle_guild(db: &SqlitePool, link: String, g_id: String) ->
         .execute(&mut pool).await;
     return match query {
         Ok(_) => Ok(format!("<{}> has been removed from from all channels", link)),
-        Err(_) => Err(format!("Failed to remove <{}> from all channels. Novel not found linked to any channel", link))
+        Err(_) => Err(format!("Failed to remove <{}> from all channels. ```Novel not found linked to any channel```", link))
     };
 }
 
@@ -187,7 +187,7 @@ pub async fn initial_handle(db: &SqlitePool, link: String, c_id: String, g_id: S
     let before = fetch(&link).await;
     let result = match before {
         Ok(x) => x,
-        Err(e) => return Err(format!("Invalid link provided [{}]", e))
+        Err(e) => return Err(format!("Failed. ```Invalid link provided [{}]```", e))
     };
     // Using tokio spawn_blocking because the soup crate is non-async
     let new_novel_unhandled = task::spawn_blocking(move || {
@@ -197,9 +197,9 @@ pub async fn initial_handle(db: &SqlitePool, link: String, c_id: String, g_id: S
     let sqlbox = match new_novel_unhandled {
         Ok(ok) => match ok {
             Some(s) => s,
-            None => return Err("Unable to locate chapters".to_string()),
+            None => return Err("Failed. ```Unable to locate chapters```".to_string()),
         }
-        Err(_) => return Err("Unable to locate chapters".to_string())
+        Err(_) => return Err("Failed. ```Unable to locate chapters```".to_string())
     };
 
     let after = insert_into_db(db, sqlbox).await;

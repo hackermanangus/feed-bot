@@ -17,15 +17,15 @@ use serenity::model::channel::Message;
 use serenity::model::id::GuildId;
 use serenity::model::prelude::Ready;
 use serenity::prelude::{Context, EventHandler};
+use serenity::static_assertions::_core::sync::atomic::{AtomicBool, Ordering::Relaxed};
 use sqlx::SqlitePool;
+use tokio::time::Duration;
 
 use crate::commands::{
     boxnovel::*
 };
 use crate::db::{database_connect, initialise_database_tables};
 use crate::utils::boxnovel_fetcher::check_updates_all;
-use tokio::time::Duration;
-use serenity::static_assertions::_core::sync::atomic::{AtomicBool, Ordering::Relaxed};
 
 pub mod structures;
 
@@ -54,16 +54,17 @@ struct Handler;
 #[async_trait]
 impl EventHandler for Handler {
     async fn cache_ready(&self, ctx: Context, _guild: Vec<GuildId>) {
-        let active = AtomicBool::new(false);
-        if active.load(Relaxed) == false {
-            let _ = tokio::spawn(async move {
+        static ACTIVE: AtomicBool = AtomicBool::new(false);
+        if ACTIVE.load(Relaxed) == false {
+            tokio::spawn(async move {
+                ACTIVE.store(true, Relaxed);
                 loop {
-                    active.store(true, Relaxed);
-
-                    let http = &ctx.http;
-                    let data = ctx.data.read().await;
-                    let db = data.get::<Db>().unwrap();
-                    let _ = check_updates_all(db, http).await;
+                    {
+                        let http = &ctx.http;
+                        let data = ctx.data.read().await;
+                        let db = data.get::<Db>().unwrap();
+                        let _ = check_updates_all(db, http).await;
+                    }
                     tokio::time::delay_for(Duration::from_secs(600)).await;
                 }
             }).await;
